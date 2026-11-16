@@ -2891,14 +2891,26 @@ function setMode(m){mode=m;store.mode=m;save();$('modeL').hidden=m!=='l';$('mode
 
 /* ---------- SPEICHERN & LADEN ---------- */
 let DL=null,pendingImport=null;
-(async()=>{try{if(window.claude&&window.claude.use)DL=await window.claude.use('downloads')}catch(e){DL=null}$('svFile').hidden=!DL;$('svCopy').hidden=!!DL})();
-$('svCopy').hidden=false;
+(async()=>{try{if(window.claude&&window.claude.use)DL=await window.claude.use('downloads')}catch(e){DL=null}})();
+$('svFile').hidden=false;$('svCopy').hidden=false;
 function svMsg(m,c=''){$('svMsg').textContent=m;$('svMsg').className='status '+c}
 function summary(d){const ls=Object.keys(d.solved||{}).filter(k=>k!=='sand').length,ps=Object.keys(d.ps||{}).filter(k=>k!=='pfree').length,wb=d.pb&&d.pb.pfree?d.pb.pfree.chips.length:0;
   return `${ps} von ${PLV.length-1} Leveln gelöst, ${wb} Bauteile auf der Werkbank.`}
 function exportData(){return JSON.stringify({app:'assembly-io',version:1,saved:new Date().toISOString(),data:store})}
 $('bSave').onclick=()=>{$('svSum').textContent='Aktueller Stand: '+summary(store);$('svConf').hidden=true;pendingImport=null;svMsg('');$('ovSave').classList.add('open')};
-$('svFile').onclick=async()=>{if(!DL)return;const name=`assembly-io-${new Date().toISOString().slice(0,10)}.json`;
+$('svFile').onclick=async()=>{const name=`assembly-io-${new Date().toISOString().slice(0,10)}.json`;
+  if(!DL){// Normaler Browser: Teilen-Menü (iPhone/iPad) oder Download
+    const txt=exportData(),blob=new Blob([txt],{type:'application/json'});
+    let file=null;try{file=new File([blob],name,{type:'application/json'})}catch(e){}
+    const touch=matchMedia('(pointer:coarse)').matches;
+    if(touch&&file&&navigator.canShare&&navigator.canShare({files:[file]})){
+      try{await navigator.share({files:[file]});svMsg(`„${name}“ wurde übergeben. Auf dem iPhone „In Dateien sichern“ wählen.`,'win')}
+      catch(e){if(e&&e.name==='AbortError')svMsg('Speichern abgebrochen.');else svMsg('Teilen ging nicht. Nutze stattdessen die Zwischenablage.','err')}
+      return}
+    try{const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;a.rel='noopener';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);
+      svMsg(`„${name}“ wurde heruntergeladen. Du findest die Datei in deinem Download-Ordner.`,'win')}
+    catch(e){svMsg('Speichern als Datei geht hier nicht. Nutze stattdessen die Zwischenablage.','err')}
+    return}
   try{await DL.save({filename:name,data:exportData()});svMsg(`„${name}“ wurde übergeben. Falls du auf dem iPhone bist: „In Dateien sichern“ wählen.`,'win')}
   catch(e){const c=e&&e.code;svMsg(c==='declined'?'Speichern abgebrochen.':c==='rate_limited'?'Es ist schon ein Speichern-Fenster offen. Kurz warten und nochmal versuchen.':'Speichern als Datei geht hier gerade nicht. Nutze stattdessen die Zwischenablage.',c==='declined'?'':'err');if(c&&c!=='declined'&&c!=='rate_limited')$('svCopy').hidden=false}};
 $('svCopy').onclick=async()=>{try{await navigator.clipboard.writeText(exportData());svMsg('Kopiert. Füge den Text z. B. in eine Notiz oder Textdatei ein. Zum Laden fügst du ihn unten unter „Stattdessen Text einfügen“ wieder ein.','win')}
